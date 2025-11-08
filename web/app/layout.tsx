@@ -33,11 +33,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased ${gugi.variable}`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased ${gugi.variable} min-h-screen flex flex-col`}
       >
         <Provider>
-          <Navbar />
-          <main className="mt-20">{children}</main>
+          <Navbar className="fixed top-0 left-0 right-0 h-20 z-50" />
+          <main className="mt-20 flex-1 w-full min-h-[calc(100dvh-5rem)] flex justify-center items-center">
+            {children}
+          </main>
         </Provider>
       </body>
     </html>

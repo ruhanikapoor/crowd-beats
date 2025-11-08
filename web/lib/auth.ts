@@ -9,20 +9,14 @@ export const auth = betterAuth({
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-      display: "popup",
-      prompt: "select_account",
+      access_type: "offline",
+      prompt: "select_account consent",
+      display: "popup"
     },
   },
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
-  rateLimit: {
-    enabled: true,
-    max: 10,
-    window: 60 * 60,
-    modelName: "ratelimit",
-    storage: "database",
-  },
   logger: {
     disabled: false,
     disableColors: false,
