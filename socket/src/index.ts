@@ -3,7 +3,14 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { Server } from "socket.io";
 import { Server as HttpServer } from "http";
+import { cors } from "hono/cors";
 const app = new Hono();
+
+app.use(
+  cors({
+    origin: "*",
+  })
+);
 
 app.get("/", (c) => {
   return c.text("Hello Hono!");
@@ -18,10 +25,15 @@ const server = serve(
     console.log(`Server is running: http://${info.address}:${info.port}`);
   }
 );
-
 const ioServer = new Server(server as HttpServer, {
   serveClient: false,
+  cors: {
+    origin: "http://localhost:3000", 
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
 });
+
 ioServer.on("error", (err) => {
   console.log(err);
 });

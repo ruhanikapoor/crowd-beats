@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 export function RoomClient() {
   const [user, setUser] = useState<null | User>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
+
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
   const { roomId } = useParams<{ roomId: string }>();
@@ -69,7 +70,6 @@ export function RoomClient() {
     <Container className="h-full flex flex-col px-4 space-y-6 md:space-y-8">
       <div>{roomId}</div>
       <div>{isAdmin ? <p>Admin</p> : <p>not admin</p>}</div>
-      <Input placeholder="Enter Youtube URL..." className="focus:outline-none selection:bg-transparent my-2"/>
     </Container>
   );
 }
