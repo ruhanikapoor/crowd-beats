@@ -37,7 +37,11 @@ function useDebounce(value: string, delay: number = 200) {
   return debouncedValue;
 }
 
-export function AddSongButton({ addSong }: { addSong: (data: object) => void }) {
+export function AddSongButton({
+  addSong,
+}: {
+  addSong: (data: object) => void;
+}) {
   // State to hold user input from the search field
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -145,15 +149,14 @@ export function AddSongButton({ addSong }: { addSong: (data: object) => void }) 
               </Button>
             </div>
 
-            {/* Display error message, if any */}
-            {error && (
-              <div className="text-sm text-muted-foreground flex justify-center items-center h-96 w-full">
-                {error}
-              </div>
-            )}
-
             {/* Scrollable area to list videos or messages */}
             <ScrollArea className="h-96 w-full rounded-md border p-4 overflow-hidden flex justify-center items-center">
+              {/* Display error message, if any */}
+              {error && (
+                <div className="text-sm text-muted-foreground flex justify-center items-center h-96 w-full">
+                  {error}
+                </div>
+              )}
               {isLoading && (
                 <div className="text-sm text-muted-foreground flex justify-center items-center h-96 w-full">
                   <Spinner />
