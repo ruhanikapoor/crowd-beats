@@ -6,7 +6,6 @@ import { redirect, useParams, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Container } from "@/components/ui/container";
 import { type User } from "better-auth";
-import { Input } from "@/components/ui/input";
 import { AddSongButton } from "./add-song-button";
 import { useSocket } from "@/hooks/use-socket";
 
@@ -49,7 +48,7 @@ export function RoomClient() {
     socket.on("joined-room", (data) => {
       console.log("Joined room confirmed:", data);
     });
-    socket.on("add-song", (data) => {
+    socket.on("new-song", (data) => {
       console.log(data);
     });
     socket.on("error", (error) => {
@@ -61,6 +60,7 @@ export function RoomClient() {
       socket.off("connect", onConnect);
       socket.off("joined-room");
       socket.off("error");
+      socket.off("new-song");
     };
   }, [user, roomId, socket]);
 
@@ -74,9 +74,9 @@ export function RoomClient() {
       author: user.name,
       data,
       room: roomId,
+      isPlayed: false,
     };
-    console.log(payload);
-    socket.emit("new-song", payload);
+    socket.emit("add-song", payload);
   };
 
   return (

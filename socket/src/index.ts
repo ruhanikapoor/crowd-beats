@@ -28,6 +28,7 @@ app.get("/api/search/yt/:searchTerm", async (c) => {
       process.env.YOUTUBE_API_KEY
     }`
   );
+  console.log(response)
 
   if (!response.ok) {
     return c.json(
@@ -41,7 +42,6 @@ app.get("/api/search/yt/:searchTerm", async (c) => {
   return c.json(
     {
       data: cleanYTData(data.items),
-      new: data.items
     },
     200
   );
@@ -72,6 +72,8 @@ ioServer.on("error", (err) => {
 
 ioServer.on("connection", (socket) => {
   console.log(`${socket.id}: connected`);
+  // Called when user join room
+
   socket.on("join-room", (data) => {
     const { userId, roomId } = data;
     if (!userId || !roomId) {
@@ -79,10 +81,11 @@ ioServer.on("connection", (socket) => {
       return;
     }
     socket.join(roomId);
-    console.log(
-      `User ${userId} with socket id ${socket.id} joined room ${roomId}`
-    );
-    socket.emit("joined-room",  roomId );
+    socket.emit("joined-room", roomId);
+  });
+  socket.on("add-song", (data) => {
+    // check if same id exists in redis
+    socket.to(data.room).emit("new-song", data);
   });
 });
 
