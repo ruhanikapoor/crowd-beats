@@ -83,7 +83,6 @@ export function AddSongButton({
         }
 
         const res = await response.json();
-        console.log(res);
         setVideos(res.data || []);
       } catch {
         setError("Something went wrong while fetching videos.");

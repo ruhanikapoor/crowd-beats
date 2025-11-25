@@ -30,7 +30,6 @@ app.get("/api/search/yt/:searchTerm", async (c) => {
       process.env.YOUTUBE_API_KEY
     }`
   );
-  console.log(response);
   if (!response.ok) {
     return c.json(
       {
@@ -85,14 +84,28 @@ ioServer.on("connection", (socket) => {
     }
     socket.join(roomId);
     const songs = await redis.lrange(`room:${roomId}:songs`, 0, -1);
-    socket.emit(
-      "sync-queue",
-      songs.map((s) => JSON.parse(s))
-    );
+    const parsedSongs = songs.map((s) => JSON.parse(s));
+    console.log("Sync queue");
+    socket.emit("test", null);
+    socket.emit("sync-queue", parsedSongs);
 
     socket.emit("joined-room", roomId);
   });
   socket.on("add-song", async (data) => {
+    const songsInRoom = await redis.lrange(`room:${data.room}:songs`, 0, -1);
+
+    // Check if any song matches the incoming song's videoId
+    const songExists = songsInRoom.some((songStr) => {
+      const song = JSON.parse(songStr);
+      return song.data.videoId === data.data.videoId;
+    });
+
+    if (songExists) {
+      // Optionally emit an error or ignore adding duplicate
+      socket.emit("error", { message: "Song already exists in room." });
+      return;
+    }
+
     await producer.send({
       topic: "song-events",
       messages: [
@@ -105,7 +118,6 @@ ioServer.on("connection", (socket) => {
         },
       ],
     });
-    socket.to(data.room).emit("new-song", data);
   });
   socket.on("clear-room", async (roomId) => {
     await producer.send({

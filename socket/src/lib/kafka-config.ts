@@ -21,16 +21,20 @@ export async function initkafka(
   consumer.run({
     eachMessage: async ({ topic, message }) => {
       const event = JSON.parse(message.value!.toString());
-      if (event.type === "add-song") {
-        // Add song to Redis list for room
-        await redis.rpush(
-          `room:${event.roomId}:songs`,
-          JSON.stringify(event.song)
-        );
-        ioServer.in(event.roomId).emit("new-song", event.song);
-      } else if (event.type === "clear-room") {
-        await redis.del(`room:${event.roomId}:songs`);
-        ioServer.in(event.roomId).emit("clear-queue");
+
+      switch (event.type) {
+        case "add-song":
+          await redis.rpush(
+            `room:${event.roomId}:songs`,
+            JSON.stringify(event.song)
+          );
+          ioServer.in(event.roomId).emit("new-song", event.song);
+          break;
+
+        case "clear-room":
+          await redis.del(`room:${event.roomId}:songs`);
+          ioServer.in(event.roomId).emit("clear-queue");
+          break;
       }
     },
   });
