@@ -55,7 +55,6 @@ export function RoomClient() {
     const seen = new Set<string>();
     const filtered = songs.filter((s) => {
       if (seen.has(s.id)) {
-        console.warn("Duplicate song id filtered:", s.id);
         return false;
       }
       seen.add(s.id);
@@ -92,17 +91,13 @@ export function RoomClient() {
 
     const onConnect = () => {
       socket.emit("join-room", { userId: user.id, roomId });
-      console.log("Socket connected and join-room emitted");
     };
 
     socket.on("connect", onConnect);
 
-    socket.on("joined-room", (data) => {
-      console.log("Joined room confirmed:", data);
-    });
+    socket.on("joined-room", (data) => {});
 
     socket.on("sync-first-queue", (songs: TSong[]) => {
-      console.log(songs);
       const uniqueSongs = uniqueById(songs);
       const playing =
         uniqueSongs.find((s) => s.isPlayed) || uniqueSongs[0] || null;
@@ -162,20 +157,24 @@ export function RoomClient() {
 
     socket.on("sync-queue", (songs: TSong[]) => {
       const uniqueSongs = uniqueById(songs);
-      console.log("first we get unique songs");
       const playing =
         uniqueSongs.find((s) => s.isPlayed) || uniqueSongs[0] || null;
-      console.log(
-        "Second we get playing by finding the one with isPlayed true"
-      );
 
       setQueueHeap(buildHeapFromArray(uniqueSongs, playing?.id || null));
-      console.log("Third we update the heap");
       // Update playingSong and currentPlayingSong outside of setPlayingSong functional update
-      if ((playingSong?.id || "") !== (playing?.id || "")) {
-        // setPlayingSong(playing);
-        // setCurrentPlayingSong(playing.id);
-        setIsPlaying(true);
+
+      if (user.id !== roomId) {
+        if ((playingSong?.id || "") !== (playing?.id || "")) {
+          setPlayingSong(playing);
+          setCurrentPlayingSong(playing.id);
+          setIsPlaying(true);
+        }
+      } else {
+        if ((playingSong?.id || "") !== (playing?.id || "")) {
+          // setPlayingSong(playing);
+          // setCurrentPlayingSong(playing.id);
+          setIsPlaying(true);
+        }
       }
     });
 
@@ -207,7 +206,7 @@ export function RoomClient() {
     });
 
     socket.on("error", (error) => {
-      console.error("Socket error:", error);
+      // toast error : {message: string}
       alert(JSON.stringify(error));
     });
 
@@ -217,6 +216,8 @@ export function RoomClient() {
       socket.off("connect", onConnect);
       socket.off("joined-room");
       socket.off("sync-queue");
+      socket.off("sync-first-queue");
+      socket.off("play-next");
       socket.off("new-song");
       socket.off("toggle-like");
       socket.off("play-song");
@@ -278,7 +279,6 @@ export function RoomClient() {
       sortedQueue.length <= 0 ||
       !socketRef.current
     ) {
-      console.log("Player not ready yet");
       return;
     }
 
@@ -300,7 +300,7 @@ export function RoomClient() {
   const playNext = () => {
     if (!socketRef.current || !user || !playingSong) return;
     if (sortedQueue.length <= 1) {
-      console.log("No next song in queue");
+      // toast no next song
       return;
     }
 
@@ -331,11 +331,11 @@ export function RoomClient() {
     height: "390",
     width: "640",
     playerVars: {
-      controls: 1,
+      controls: 0,
       disablekb: 1,
       enablejsapi: 1,
       fs: 0,
-      autoplay: 0,
+      autoplay: 1,
     },
   };
 
