@@ -14,6 +14,8 @@ import { TSong } from "@/lib/types";
 export function RoomClient() {
   const [user, setUser] = useState<null | User>(null);
   const [queue, setQueue] = useState<TSong[]>([]);
+  const [currentPlayingSong, setCurrentPlayingSong] = useState("");
+  const [isPlaying, setIsPlaying] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const router = useRouter();
   const { roomId } = useParams<{ roomId: string }>();
@@ -21,7 +23,7 @@ export function RoomClient() {
   if (!roomId) {
     router.replace("/rooms");
   }
-
+  // session check
   useEffect(() => {
     const getSession = async () => {
       const { data: session } = await authClient.getSession();
@@ -33,6 +35,7 @@ export function RoomClient() {
     getSession();
   }, [roomId, router]);
 
+  // socket
   useEffect(() => {
     if (!user || !roomId) return;
 
