@@ -1,6 +1,6 @@
 "use client";
 import YouTube, { YouTubeProps } from "react-youtube";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { io, Socket } from "socket.io-client";
 import { v4 as uuid } from "uuid";
 import { useParams, useRouter } from "next/navigation";
@@ -11,12 +11,16 @@ import { AddSongButton } from "./add-song-button";
 import { SongQueue } from "./song-queue";
 import { TSong } from "@/lib/types";
 import { SongControls } from "./song-controls";
+import MaxHeap from "heap-js";
 
 export function RoomClient() {
   const [user, setUser] = useState<null | User>(null);
-  const [queue, setQueue] = useState<TSong[]>([]);
+  const [queueHeap, setQueueHeap] = useState<MaxHeap<TSong> | null>(null);
+  const [playingSong, setPlayingSong] = useState<TSong | null>(null);
   const [currentPlayingSong, setCurrentPlayingSong] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playerReady, setPlayerReady] = useState(false);
+
   const playerRef = useRef<any>(null);
   const socketRef = useRef<Socket | null>(null);
   const router = useRouter();
@@ -25,23 +29,52 @@ export function RoomClient() {
   if (!roomId) {
     router.replace("/rooms");
   }
-  // session check
+
+  // Comparator for max-heap - sort by upvotes desc, then id asc for stability
+  const comparator = (a: TSong, b: TSong) => {
+    if (b.upvotes !== a.upvotes) return b.upvotes - a.upvotes;
+    return a.id.localeCompare(b.id);
+  };
+
+  // Build heap from an array of songs, excluding the playing song
+  const buildHeapFromArray = (
+    songs: TSong[],
+    playingId: string | null = null
+  ) => {
+    const heap = new MaxHeap<TSong>(comparator);
+    songs.forEach((song) => {
+      if (song.id !== playingId) {
+        heap.push(song);
+      }
+    });
+    return heap;
+  };
+
+  // Remove duplicates by song id
+  const uniqueById = (songs: TSong[]): TSong[] => {
+    const seen = new Set<string>();
+    return songs.filter((s) => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+  };
+
   useEffect(() => {
     const getSession = async () => {
       const { data: session } = await authClient.getSession();
       if (!session) {
-        return router.replace(`/login?rooms=${roomId}`);
+        router.replace(`/login?rooms=${roomId}`);
+        return;
       }
       setUser(session.user);
     };
     getSession();
   }, [roomId, router]);
 
-  // socket
   useEffect(() => {
     if (!user || !roomId) return;
 
-    // Create socket connection directly
     const socket = io("http://localhost:3001", {});
     socketRef.current = socket;
 
@@ -50,126 +83,97 @@ export function RoomClient() {
       console.log("Socket connected and join-room emitted");
     };
 
-    // Register event listeners
     socket.on("connect", onConnect);
-    // confirmation on joining the room
+
     socket.on("joined-room", (data) => {
       console.log("Joined room confirmed:", data);
     });
-    // sync the queue on first joining
-    socket.on("sync-queue", (data: TSong[]) => {
-      const sorted = sortQueue(data);
-      setQueue(sorted);
 
-      if (sorted.length > 0 && !currentPlayingSong && sorted[0].data?.videoId) {
-        setCurrentPlayingSong(sorted[0].id);
-      }
+    socket.on("sync-queue", (songs: TSong[]) => {
+      console.log(songs);
+      const uniqueSongs = uniqueById(songs);
+      const playing =
+        uniqueSongs.find((s) => s.isPlayed) || uniqueSongs[0] || null;
+      setPlayingSong(playing);
+      setCurrentPlayingSong(playing?.id || "");
+      setQueueHeap(buildHeapFromArray(uniqueSongs, playing?.id || null));
     });
-    // someone added a new song
-    socket.on("new-song", (data: TSong) => {
-      setQueue((prev) => {
-        // Add the new song
-        const updatedQueue = [...prev, data];
 
-        // If queue was empty before, set current playing song
-        if (prev.length <= 0) {
-          setCurrentPlayingSong(data.id);
+    socket.on("new-song", (song: TSong) => {
+      setQueueHeap((prevHeap) => {
+        const heap = prevHeap
+          ? prevHeap.clone()
+          : new MaxHeap<TSong>(comparator);
+
+        if (!playingSong && song.isPlayed) {
+          setPlayingSong(song);
+          setCurrentPlayingSong(song.id);
+        } else if (!playingSong && heap.size() === 0) {
+          setPlayingSong(song);
+          setCurrentPlayingSong(song.id);
         }
 
-        // Sort the updated queue before setting state
-        return sortQueue(updatedQueue);
+        // Avoid adding duplicate songs
+        const exists = heap.toArray().some((s) => s.id === song.id);
+        if (!song.isPlayed && !exists) {
+          heap.push(song);
+        }
+
+        return heap;
       });
     });
 
-    // when admin plays a song
-    socket.on("play-song", (data: TSong) => {
-      console.log(data);
-      setQueue((prevQueue) => {
-        let songChanged = false;
-        const updatedQueue = prevQueue.map((song) => {
-          if (song.id === data.id) {
-            if (song.isPlayed !== data.isPlayed) {
-              songChanged = true;
-              song.isPlayed = data.isPlayed;
-              return data;
-            }
-          }
-          return song;
-        });
+    socket.on("play-song", (song: TSong) => {
+      setQueueHeap((prevHeap) => {
+        if (!prevHeap) return prevHeap;
+        const newHeap = new MaxHeap<TSong>(comparator);
 
-        if (!songChanged) return prevQueue;
+        // Remove the playing song from heap and push all others
+        prevHeap
+          .toArray()
+          .filter((s) => s.id !== song.id)
+          .forEach((s) => newHeap.push(s));
 
-        const sortedQueue = sortQueue(updatedQueue);
-
-        const isSameOrder =
-          sortedQueue.length === prevQueue.length &&
-          sortedQueue.every((song, index) => song.id === prevQueue[index].id);
-        console.log(sortQueue);
-        return isSameOrder ? prevQueue : sortedQueue;
+        return newHeap;
       });
 
-      setCurrentPlayingSong(data.id);
+      setPlayingSong(song);
+      setCurrentPlayingSong(song.id);
       setIsPlaying(true);
     });
 
-    // when someone likes a song
-    socket.on("toggle-like", (data: TSong) => {
-      setQueue((prevQueue) => {
-        let songChanged = false;
+    socket.on("toggle-like", (song: TSong) => {
+      setQueueHeap((prevHeap) => {
+        if (!prevHeap) return prevHeap;
+        const temp: TSong[] = [];
+        let updatedPlayingSong = playingSong;
 
-        // Map queue with updated song if it really changed
-        const updatedQueue = prevQueue.map((song) => {
-          if (song.id === data.id) {
-            // Quick shallow check if anything changed
-            if (
-              song.upvotes !== data.upvotes ||
-              song.upvotedBy.length !== data.upvotedBy.length
-            ) {
-              songChanged = true;
-              return data;
-            }
+        while (!prevHeap.isEmpty()) {
+          const s = prevHeap.pop()!;
+          if (s.id === song.id) {
+            temp.push(song);
+          } else {
+            temp.push(s);
           }
-          return song;
-        });
-
-        if (!songChanged) {
-          // No change, return previous queue to avoid re-render
-          return prevQueue;
         }
 
-        const playingSong = updatedQueue.find((song) => song.isPlayed) || null;
-        const otherSongs = updatedQueue.filter((song) => !song.isPlayed);
+        const newHeap = new MaxHeap<TSong>(comparator);
+        temp.forEach((s) => newHeap.push(s));
 
-        // Sort others by upvotes descending
-        const sortedOthers = [...otherSongs].sort(
-          (a, b) => b.upvotes - a.upvotes
-        );
-
-        // Check if sorting changed the order
-        const isOrderSame = sortedOthers.every(
-          (song, index) => song.id === otherSongs[index].id
-        );
-        if (
-          isOrderSame &&
-          (!playingSong || prevQueue[0]?.id === playingSong.id)
-        ) {
-          // Order unchanged and playing song still on top: reuse previous array
-          if (playingSong) return prevQueue;
-          else return otherSongs; // no playing song case
+        if (playingSong && playingSong.id === song.id) {
+          updatedPlayingSong = song;
+          setPlayingSong(updatedPlayingSong);
         }
 
-        // Return new array with playing song first if exists
-        return playingSong ? [playingSong, ...sortedOthers] : sortedOthers;
+        return newHeap;
       });
     });
 
-    // if any error
     socket.on("error", (error) => {
       console.error("Socket error:", error);
       alert(JSON.stringify(error));
     });
 
-    // Connect the socket
     socket.connect();
 
     return () => {
@@ -178,25 +182,32 @@ export function RoomClient() {
       socket.off("sync-queue");
       socket.off("new-song");
       socket.off("toggle-like");
+      socket.off("play-song");
       socket.off("error");
       socket.disconnect();
     };
   }, [user, roomId]);
 
+  useEffect(() => {
+    if (!playerRef.current) return;
+    const currentSong = getSongById(currentPlayingSong);
+    if (currentSong?.data.videoId) {
+      playerRef.current.loadVideoById(currentSong.data.videoId);
+    }
+  }, [currentPlayingSong]);
+
   function getSongById(id: string): TSong | undefined {
-    return queue.find((song) => song.id === id);
+    if (playingSong?.id === id) return playingSong;
+    if (!queueHeap) return undefined;
+    const arr = queueHeap.toArray();
+    return arr.find((song) => song.id === id) || undefined;
   }
 
-  function sortQueue(queue: TSong[]): TSong[] {
-    // Separate playing song
-    const playingSong = queue.find((song) => song.isPlayed) || null;
-    const otherSongs = queue.filter((song) => !song.isPlayed);
-
-    // Sort others by upvotes desc
-    const sortedOthers = [...otherSongs].sort((a, b) => b.upvotes - a.upvotes);
-
-    return playingSong ? [playingSong, ...sortedOthers] : sortedOthers;
-  }
+  const sortedQueue = useMemo(() => {
+    if (!queueHeap) return playingSong ? [playingSong] : [];
+    const others = queueHeap.toArray().sort(comparator);
+    return playingSong ? [playingSong, ...others] : others;
+  }, [queueHeap, playingSong]);
 
   const addSong = (data: object) => {
     if (!user || !socketRef.current) return;
@@ -216,19 +227,25 @@ export function RoomClient() {
 
   const toggleLike = (songId: string) => {
     if (!user || !socketRef.current) return;
-    const payload = {
+    socketRef.current.emit("toggle-like", {
       songId,
       userId: user.id,
       roomId,
-    };
-    socketRef.current.emit("toggle-like", payload);
+    });
   };
 
   const togglePlay = () => {
-    if (!playerRef.current || queue.length <= 0 || !socketRef.current) return;
+    if (
+      !playerReady ||
+      !playerRef.current ||
+      sortedQueue.length <= 0 ||
+      !socketRef.current
+    ) {
+      console.log("Player not ready yet");
+      return;
+    }
 
     const playerState = playerRef.current.getPlayerState();
-    // Player state 1 means playing, 2 means paused
     if (playerState === 1) {
       playerRef.current.pauseVideo();
       setIsPlaying(false);
@@ -238,62 +255,62 @@ export function RoomClient() {
       setIsPlaying(true);
     }
   };
-  const playNext = () => {};
+
+  const playNext = () => {
+    // Implement play next if needed
+  };
 
   const playSong = (songId: string) => {
     if (!socketRef.current || !user) return;
-    const payload = {
+    socketRef.current.emit("play-song", {
       roomId,
       songId,
       userId: user.id,
-    };
-    socketRef.current.emit("play-song", payload);
+    });
   };
+
   const opts: YouTubeProps["opts"] = {
     height: "390",
     width: "640",
     playerVars: {
-      controls: 1, // Change later
+      controls: 1,
       disablekb: 1,
       enablejsapi: 1,
       fs: 0,
       autoplay: 0,
     },
   };
+
   const onReady: YouTubeProps["onReady"] = (event) => {
     playerRef.current = event.target;
+    setPlayerReady(true);
   };
 
   if (!user || !roomId) {
     return <Container>Loading...</Container>;
   }
 
-  // Render player only if currentPlayingSong has valid videoId
-  const currentSong = getSongById(currentPlayingSong);
   return (
     <Container className="h-full w-full flex flex-col px-4 space-y-6 md:space-y-8 relative overflow-hidden max-h-[calc(100dvh-5rem)] min-h-[calc(100dvh-5rem)]">
-      {
-        // check if admin
-        user?.id === roomId && currentSong && (
-          <YouTube
-            videoId={getSongById(currentPlayingSong)?.data.videoId || ""}
-            opts={opts}
-            onReady={onReady}
-          />
-        )
-      }
-      {/* admin controls */}
+      {user?.id === roomId && playingSong && (
+        <YouTube
+          videoId={playingSong.data.videoId || "2g811Eo7K8U"}
+          opts={opts}
+          onReady={onReady}
+        />
+      )}
+
       {user?.id === roomId && (
         <SongControls
           playNext={playNext}
           isPlaying={isPlaying}
           togglePlay={togglePlay}
-          currentPlayingSong={getSongById(currentPlayingSong)?.id || ""}
+          currentPlayingSong={currentPlayingSong}
         />
       )}
+
       <AddSongButton addSong={addSong} />
-      <SongQueue queue={queue || []} user={user!} toggleLike={toggleLike} />
-      {/* <div>{roomId}</div> */}
+      <SongQueue queue={sortedQueue} user={user!} toggleLike={toggleLike} />
     </Container>
   );
 }

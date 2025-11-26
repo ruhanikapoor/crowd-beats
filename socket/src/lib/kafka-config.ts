@@ -79,6 +79,7 @@ export async function initkafka(
         case "play-song":
           const pSongData = event.data;
           const pSong = await getSong(pSongData.songId);
+          if (pSong.isPlayed) return;
           pSong.isPlayed = true;
           await redis.hset(`song:${pSongData.songId}`, {
             isPlayed: JSON.stringify(true),

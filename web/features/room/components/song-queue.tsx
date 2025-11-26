@@ -20,7 +20,7 @@ export function SongQueue({
           likedByMe = true;
         return (
           <div
-            key={song.id}
+            key={"queue" + song.id}
             className="flex items-center gap-4 hover:bg-accent hover:cursor-pointer w-full h-full border-b-2 first:border-t-2 p-2"
           >
             <img
@@ -43,7 +43,7 @@ export function SongQueue({
                   <p
                     className="flex justify-center items-center gap-4"
                     onClick={() => {
-                      console.log("like")
+                      console.log("like");
                       toggleLike(song.id);
                     }}
                   >
