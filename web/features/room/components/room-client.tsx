@@ -47,21 +47,73 @@ export function RoomClient() {
 
     // Register event listeners
     socket.on("connect", onConnect);
-
+    // confirmation on joining the room
     socket.on("joined-room", (data) => {
       console.log("Joined room confirmed:", data);
     });
-
+    // sync the queue on first joining
     socket.on("sync-queue", (data) => {
       console.log("Sync queue from server:", data);
       setQueue(data as TSong[]);
     });
-
+    // someone added a new song
     socket.on("new-song", (data: TSong) => {
       console.log("New song received", data);
       setQueue((prev) => [...prev, data]);
     });
 
+    // when someone likes a song
+    socket.on("toggle-like", (data: TSong) => {
+      setQueue((prevQueue) => {
+        let songChanged = false;
+
+        // Map queue with updated song if it really changed
+        const updatedQueue = prevQueue.map((song) => {
+          if (song.id === data.id) {
+            // Quick shallow check if anything changed
+            if (
+              song.upvotes !== data.upvotes ||
+              song.upvotedBy.length !== data.upvotedBy.length
+            ) {
+              songChanged = true;
+              return data;
+            }
+          }
+          return song;
+        });
+
+        if (!songChanged) {
+          // No change, return previous queue to avoid re-render
+          return prevQueue;
+        }
+
+        const playingSong = updatedQueue.find((song) => song.isPlayed) || null;
+        const otherSongs = updatedQueue.filter((song) => !song.isPlayed);
+
+        // Sort others by upvotes descending
+        const sortedOthers = [...otherSongs].sort(
+          (a, b) => b.upvotes - a.upvotes
+        );
+
+        // Check if sorting changed the order
+        const isOrderSame = sortedOthers.every(
+          (song, index) => song.id === otherSongs[index].id
+        );
+        if (
+          isOrderSame &&
+          (!playingSong || prevQueue[0]?.id === playingSong.id)
+        ) {
+          // Order unchanged and playing song still on top: reuse previous array
+          if (playingSong) return prevQueue;
+          else return otherSongs; // no playing song case
+        }
+
+        // Return new array with playing song first if exists
+        return playingSong ? [playingSong, ...sortedOthers] : sortedOthers;
+      });
+    });
+
+    // if any error
     socket.on("error", (error) => {
       console.error("Socket error:", error);
       alert(JSON.stringify(error));

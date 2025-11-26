@@ -42,3 +42,25 @@ export async function getAllSongsInRoom(roomId: string) {
 
   return songs;
 }
+
+export async function getSong(songId: string) {
+  const songHash = await redis.hgetall(`song:${songId}`);
+
+  // Parse fields
+  return {
+    id: songHash.id,
+    author: songHash.author,
+    authorId: songHash.authorId,
+    room: songHash.room,
+    isPlayed: songHash.isPlayed === "true",
+    upvotes: Number(songHash.upvotes),
+    upvotedBy: JSON.parse(songHash.upvotedBy || "[]"),
+    data: {
+      videoId: songHash.videoId,
+      image: songHash.image,
+      title: songHash.title,
+      description: songHash.description,
+      author: songHash.songAuthor,
+    },
+  };
+}

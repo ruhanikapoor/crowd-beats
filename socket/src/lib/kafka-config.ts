@@ -1,6 +1,7 @@
 import { Kafka } from "kafkajs";
 import { Server, type DefaultEventsMap } from "socket.io";
 import { redis } from "./redis-config.js";
+import { getSong } from "./utils.js";
 
 export const kafka = new Kafka({
   clientId: "app",
@@ -49,9 +50,28 @@ export async function initkafka(
 
         case "toggle-like":
           const { songId, userId, roomId } = event.data;
+          const song = await getSong(songId);
+          const { upvotedBy } = song;
+          const isLikedByUser = upvotedBy.includes(userId);
 
-          const allsongs = await redis.lrange(`room:${roomId}:songs`, 0, -1);
-          console.log(JSON.parse(allsongs[0]));
+          if (isLikedByUser) {
+            // Remove the userId from the upvotedBy array
+            song.upvotedBy = upvotedBy.filter((id: string) => id !== userId);
+            song.upvotes -= 1;
+          } else {
+            // Add the userId
+            song.upvotedBy.push(userId);
+            song.upvotes += 1;
+          }
+
+          // After toggling, save back to Redis hash
+          await redis.hset(`song:${songId}`, {
+            upvotes: song.upvotes.toString(),
+            upvotedBy: JSON.stringify(song.upvotedBy),
+          });
+
+          // send to all clients
+          ioServer.in(event.roomId).emit("toggle-like", song);
           break;
 
         case "clear-room":

@@ -57,7 +57,7 @@ export function SongQueue({
                       <HeartIcon className="" size={20} />
                     )}
                     {song.upvotes || 0}
-                    {!song.isPlayed && <PlayingLines />}
+                    {song.isPlayed && <PlayingLines />}
                   </p>
                 )}
               </div>
