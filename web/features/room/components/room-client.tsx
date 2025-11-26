@@ -163,6 +163,12 @@ export function RoomClient() {
     socketRef.current.emit("toggle-like", payload);
   };
 
+  const togglePlay = () => {
+    // check if song is playing
+    if (queue.length <= 0) return;
+    
+  };
+  const playNext = () => {};
   return (
     <Container className="h-full w-full flex flex-col px-4 space-y-6 md:space-y-8 relative overflow-hidden max-h-[calc(100dvh-5rem)] min-h-[calc(100dvh-5rem)]">
       {
@@ -179,10 +185,10 @@ export function RoomClient() {
       {/* admin controls */}
       {user?.id === roomId && (
         <SongControls
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
-        currentPlayingSong={currentPlayingSong}
-          setCurrentPlayingSong={setCurrentPlayingSong}
+          playNext={playNext}
+          isPlaying={isPlaying}
+          togglePlay={togglePlay}
+          currentPlayingSong={currentPlayingSong}
         />
       )}
       <AddSongButton addSong={addSong} />
