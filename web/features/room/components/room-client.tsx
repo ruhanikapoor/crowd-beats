@@ -127,6 +127,7 @@ export function RoomClient() {
       socket.off("joined-room");
       socket.off("sync-queue");
       socket.off("new-song");
+      socket.off("toggle-like");
       socket.off("error");
       socket.disconnect();
     };
