@@ -59,6 +59,7 @@ export function SongQueue({
                     {song.isPlayed && <PlayingLines />}
                   </p>
                 )}
+                {song.isPlayed && <PlayingLines />}
               </div>
             </div>
           </div>

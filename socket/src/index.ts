@@ -83,7 +83,7 @@ ioServer.on("connection", (socket) => {
       return;
     }
     socket.join(roomId);
-    const parsedSongs = await getAllSongsInRoom(roomId)
+    const parsedSongs = await getAllSongsInRoom(roomId);
     socket.emit("sync-queue", parsedSongs);
 
     socket.emit("joined-room", roomId);
@@ -135,6 +135,29 @@ ioServer.on("connection", (socket) => {
       ],
     });
   });
+  // when admin plays a song
+  socket.on("play-song", async (data) => {
+    if (data.userId !== data.roomId) {
+      socket.emit("error", {
+        message: "Only room owner can perform this action",
+      });
+      return;
+    }
+    console.log("playing song")
+    await producer.send({
+      topic: "song-events",
+      messages: [
+        {
+          value: JSON.stringify({
+            type: "play-song",
+            roomId: data.roomId,
+            data,
+          }),
+        },
+      ],
+    });
+  });
+
   socket.on("clear-room", async (roomId) => {
     await producer.send({
       topic: "song-events",

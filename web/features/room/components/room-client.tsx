@@ -67,7 +67,6 @@ export function RoomClient() {
     });
     // someone added a new song
     socket.on("new-song", (data: TSong) => {
-      console.log("New song received", data);
       setQueue((prev) => {
         // if no song was present then take the song and add it as playing song
         if (prev.length == 0) {
@@ -76,6 +75,31 @@ export function RoomClient() {
         }
 
         return [...prev, data];
+      });
+    });
+    // when admin plays a song
+    socket.on("play-song", (data: TSong) => {
+      setQueue((prevQueue) => {
+        let songChanged = false;
+        const updatedQueue = prevQueue.map((song) => {
+          if (song.id === data.id) {
+            if (song.isPlayed !== data.isPlayed) {
+              songChanged = true;
+              return data;
+            }
+          }
+          return song;
+        });
+
+        if (!songChanged) return prevQueue;
+
+        const sortedQueue = sortQueue(updatedQueue);
+
+        const isSameOrder =
+          sortedQueue.length === prevQueue.length &&
+          sortedQueue.every((song, index) => song.id === prevQueue[index].id);
+
+        return isSameOrder ? prevQueue : sortedQueue;
       });
     });
 
@@ -192,7 +216,7 @@ export function RoomClient() {
   };
 
   const togglePlay = () => {
-    if (!playerRef.current || queue.length <= 0) return;
+    if (!playerRef.current || queue.length <= 0 || !socketRef.current) return;
 
     const playerState = playerRef.current.getPlayerState();
     // Player state 1 means playing, 2 means paused
@@ -201,11 +225,21 @@ export function RoomClient() {
       setIsPlaying(false);
     } else {
       playerRef.current.playVideo();
+      playSong(currentPlayingSong);
       setIsPlaying(true);
     }
   };
   const playNext = () => {};
 
+  const playSong = (songId: string) => {
+    if (!socketRef.current || !user) return;
+    const payload = {
+      roomId,
+      songId,
+      userId: user.id,
+    };
+    socketRef.current.emit("play-song", payload);
+  };
   const opts: YouTubeProps["opts"] = {
     height: "390",
     width: "640",
@@ -227,7 +261,6 @@ export function RoomClient() {
 
   // Render player only if currentPlayingSong has valid videoId
   const currentSong = getSongById(currentPlayingSong);
-  console.log(currentSong);
   return (
     <Container className="h-full w-full flex flex-col px-4 space-y-6 md:space-y-8 relative overflow-hidden max-h-[calc(100dvh-5rem)] min-h-[calc(100dvh-5rem)]">
       {

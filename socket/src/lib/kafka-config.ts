@@ -49,29 +49,43 @@ export async function initkafka(
           break;
 
         case "toggle-like":
-          const { songId, userId, roomId } = event.data;
-          const song = await getSong(songId);
+          const data = event.data;
+          const song = await getSong(data.songId);
           const { upvotedBy } = song;
-          const isLikedByUser = upvotedBy.includes(userId);
+          const isLikedByUser = upvotedBy.includes(data.userId);
 
           if (isLikedByUser) {
             // Remove the userId from the upvotedBy array
-            song.upvotedBy = upvotedBy.filter((id: string) => id !== userId);
+            song.upvotedBy = upvotedBy.filter(
+              (id: string) => id !== data.userId
+            );
             song.upvotes -= 1;
           } else {
             // Add the userId
-            song.upvotedBy.push(userId);
+            song.upvotedBy.push(data.userId);
             song.upvotes += 1;
           }
 
           // After toggling, save back to Redis hash
-          await redis.hset(`song:${songId}`, {
+          await redis.hset(`song:${data.songId}`, {
             upvotes: song.upvotes.toString(),
             upvotedBy: JSON.stringify(song.upvotedBy),
           });
 
           // send to all clients
           ioServer.in(event.roomId).emit("toggle-like", song);
+          break;
+
+        case "play-song":
+          console.log("playing song");
+          const pSongData = event.data;
+          const pSong = await getSong(pSongData.songId);
+          console.log(pSong);
+          pSong.isPlayed = true;
+          await redis.hset(`song:${pSongData.songId}`, {
+            isPlayed: JSON.stringify(true),
+          });
+          ioServer.in(event.roomId).emit("play-song", pSong);
           break;
 
         case "clear-room":
