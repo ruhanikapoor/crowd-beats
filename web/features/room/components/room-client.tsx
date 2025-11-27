@@ -25,6 +25,11 @@ export function RoomClient() {
   const socketRef = useRef<Socket | null>(null);
   const router = useRouter();
   const { roomId } = useParams<{ roomId: string }>();
+  const playingSongRef = useRef(playingSong);
+
+  useEffect(() => {
+    playingSongRef.current = playingSong;
+  }, [playingSong]);
 
   if (!roomId) {
     router.replace("/rooms");
@@ -114,13 +119,18 @@ export function RoomClient() {
     });
 
     socket.on("new-song", (song: TSong) => {
+      console.log("New song ", { song });
       setQueueHeap((prevHeap) => {
         const heap = prevHeap
           ? prevHeap.clone()
           : new MaxHeap<TSong>(comparator);
-
-        if (!playingSong) {
-          if (playerRef.current) playerRef.current.stopVideo();
+        if (!playingSongRef.current) {
+          console.log("No song playing");
+          if (playerRef.current) {
+            console.log("Stopping song");
+            playerRef.current.stopVideo();
+          }
+          console.log("Set new playing song");
           setPlayingSong(song);
           setCurrentPlayingSong(song.id);
           setIsPlaying(true);
@@ -128,10 +138,13 @@ export function RoomClient() {
           return heap;
         }
 
+        // Only add to queue if NOT playing
         const exists = heap.toArray().some((s) => s.id === song.id);
         if (!song.isPlayed && !exists) {
+          console.log("Pushing song to heap");
           heap.push(song);
         }
+        console.log("Done");
         return heap;
       });
     });
@@ -140,19 +153,18 @@ export function RoomClient() {
       setQueueHeap((prevHeap) => {
         if (!prevHeap) return prevHeap;
         const newHeap = new MaxHeap<TSong>(comparator);
-
-        // Remove the playing song from heap and push all others
         prevHeap
           .toArray()
           .filter((s) => s.id !== song.id)
           .forEach((s) => newHeap.push(s));
-
         return newHeap;
       });
 
+      if (playerRef.current) playerRef.current.stopVideo();
       setPlayingSong(song);
       setCurrentPlayingSong(song.id);
       setIsPlaying(true);
+      setPlayerReady(false);
     });
 
     // socket.on("play-next", (song: TSong) => {
@@ -232,13 +244,29 @@ export function RoomClient() {
     };
   }, [user, roomId]);
 
+  // useEffect(() => {
+  //   if (!playerRef.current) return;
+  //   const currentSong = getSongById(currentPlayingSong);
+  //   if (currentSong?.data.videoId) {
+  //     playerRef.current.loadVideoById(currentSong.data.videoId);
+  //   }
+  // }, [currentPlayingSong]);
+
   useEffect(() => {
-    if (!playerRef.current) return;
+    if (!playerRef.current || !playerReady) return;
     const currentSong = getSongById(currentPlayingSong);
     if (currentSong?.data.videoId) {
-      playerRef.current.loadVideoById(currentSong.data.videoId);
+      try {
+        // Double-check player is actually usable
+        if (playerRef.current.getPlayerState !== undefined) {
+          playerRef.current.loadVideoById(currentSong.data.videoId);
+        }
+      } catch (error) {
+        console.error("Player load failed:", error);
+        setPlayerReady(false);
+      }
     }
-  }, [currentPlayingSong]);
+  }, [currentPlayingSong, playerReady]);
 
   function getSongById(id: string): TSong | undefined {
     if (playingSong?.id === id) return playingSong;
@@ -266,6 +294,7 @@ export function RoomClient() {
       upvotes: 1,
       upvotedBy: [user.id],
     };
+    console.log("adding song", { payload });
     socketRef.current.emit("add-song", payload);
   };
 
@@ -357,16 +386,18 @@ export function RoomClient() {
   return (
     <Container className="h-full w-full flex flex-col px-4 space-y-6 md:space-y-8 relative overflow-hidden max-h-[calc(100dvh-5rem)] min-h-[calc(100dvh-5rem)]">
       {user?.id === roomId && playingSong && playingSong.data?.videoId && (
-        <YouTube
-          videoId={playingSong.data.videoId}
-          opts={opts}
-          onReady={onReady}
-          onEnd={() => {
-            setIsPlaying(false);
-            playNext();
-          }}
-          className="hidden"
-        />
+        <div className="flex justify-center items-center w-full">
+          <YouTube
+            videoId={playingSong.data.videoId}
+            opts={opts}
+            onReady={onReady}
+            onEnd={() => {
+              setIsPlaying(false);
+              playNext();
+            }}
+            className=""
+          />
+        </div>
       )}
 
       {user?.id === roomId && (
