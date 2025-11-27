@@ -1,5 +1,6 @@
 "use client";
 import YouTube, { YouTubeProps } from "react-youtube";
+import { toast } from "sonner";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { io, Socket } from "socket.io-client";
 import { v4 as uuid } from "uuid";
@@ -110,13 +111,11 @@ export function RoomClient() {
           : new MaxHeap<TSong>(comparator);
 
         if (!playingSongRef.current) {
-
           // Only stop player if admin AND player exists
           if (user?.id === roomId && playerRef.current) {
             try {
               playerRef.current.stopVideo();
-            } catch (error) {
-            }
+            } catch (error) {}
           }
           setPlayingSong(song);
           setCurrentPlayingSong(song.id);
@@ -220,17 +219,16 @@ export function RoomClient() {
 
     socket.on("error", (error) => {
       // toast error : {message: string}
+      toast.error(error.message || "Something went wrong");
       alert(JSON.stringify(error));
     });
 
     socket.on("clear-queue", () => {
-
       // Safely stop player only if it exists and is ready
       if (playerRef.current && playerReady) {
         try {
           playerRef.current.stopVideo();
-        } catch (error) {
-        }
+        } catch (error) {}
       }
 
       // Clear all state
@@ -411,7 +409,7 @@ export function RoomClient() {
               setIsPlaying(false);
               playNext();
             }}
-            className=""
+            className="hidden"
           />
         </div>
       )}
