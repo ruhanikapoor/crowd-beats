@@ -1,3 +1,7 @@
+import "dotenv/config";
+
 import { Redis } from "ioredis";
 
-export const redis = new Redis();
+const redisURL = process.env.REDIS_URL || "http://localhost:6379";
+
+export const redis = new Redis(redisURL);

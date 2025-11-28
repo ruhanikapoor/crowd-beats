@@ -1,17 +1,30 @@
+import "dotenv/config";
+
 import { Kafka } from "kafkajs";
 import { Server, type DefaultEventsMap } from "socket.io";
 import { redis } from "./redis-config.js";
 import { getAllSongsInRoom, getSong } from "./utils.js";
 
+const isProduction = process.env.NODE_ENV === "production";
+const kafkaUrl = process.env.KAFKA_URL!;
+
 export const kafka = new Kafka({
   clientId: "app",
-  brokers: ["localhost:9092"],
+  brokers: isProduction ? [kafkaUrl] : ["localhost:9092"], // Docker Kafka
+  ...(isProduction && {
+    ssl: true,
+    sasl: {
+      mechanism: "plain", 
+      username: process.env.KAFKA_USERNAME!,
+      password: process.env.KAFKA_PASSWORD!,
+    },
+  }),
 });
 export const consumer = kafka.consumer({ groupId: "socket-group" });
 export const producer = kafka.producer();
 
 export async function initkafka(
-  ioServer: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>
+  ioServer: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>,
 ) {
   await producer.connect();
   await consumer.connect();
@@ -58,7 +71,7 @@ export async function initkafka(
           if (isLikedByUser) {
             // Remove the userId from the upvotedBy array
             tSong.upvotedBy = upvotedBy.filter(
-              (id: string) => id !== tData.userId
+              (id: string) => id !== tData.userId,
             );
             tSong.upvotes -= 1;
           } else {
@@ -133,7 +146,7 @@ export async function initkafka(
           await redis.del(roomk);
 
           console.log(
-            `Cleared queue for room ${roomId}, deleted ${songIds.length} songs`
+            `Cleared queue for room ${roomId}, deleted ${songIds.length} songs`,
           );
 
           //   4. Notify all clients in room
@@ -141,7 +154,7 @@ export async function initkafka(
           break;
       }
       console.timeEnd(
-        `event-${event.type}-${event.data?.songId || event.roomId}`
+        `event-${event.type}-${event.data?.songId || event.roomId}`,
       );
     },
   });
